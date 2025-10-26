@@ -93,6 +93,23 @@ async function performScan(target) {
     alerts: alerts.alerts || [],
   };
 }
+// ================== WAIT FOR ZAP READY ==================
+async function waitForZapReady() {
+  let attempts = 0;
+  while (attempts < 10) {
+    try {
+      // Check if ZAP responds
+      await axios.get(`${ZAP_HOST}/JSON/core/view/version/`);
+      console.log("✅ ZAP daemon is ready");
+      return true;
+    } catch {
+      attempts++;
+      console.log(`⏳ Waiting for ZAP to start... (${attempts}/10)`);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  throw new Error("ZAP Daemon not ready after multiple attempts");
+}
 
 // ================== ROUTES ==================
 //  Health check (used by Dockerfile+host)
@@ -182,10 +199,16 @@ process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception:", err);
 });
 
-app.listen(PORT, () =>
-  console.log(`⚡ ZAP wrapper running on ${PORT}, awaiting at ${ZAP_HOST}`)
-);
-
-
-
+(async () => {
+  try {
+    console.log("🚀 Starting ZAP Vault service...");
+    await waitForZapReady();
+    app.listen(PORT, () =>
+      console.log(`⚡ ZAP wrapper running on ${PORT}, connected to ${ZAP_HOST}`)
+    );
+  } catch (err) {
+    console.error("❌ Failed to start service:", err.message);
+    process.exit(1);
+  }
+})();
 
