@@ -12,8 +12,8 @@ const app = express();
 app.use(express.json());
 
 // ================== CONFIG ==================
-const ZAP_HOST = "http://127.0.0.1:8080";
-const PORT = process.env.PORT || 3000;
+const ZAP_HOST = "http://0.0.0.0:8080";
+const PORT = 3000;
 const MAX_SCAN_TIME_MS = 3 * 60 * 1000; // 3 minutes
 const POLL_INTERVAL_MS = 3000;
 const VAULT_ORIGIN = process.env.VAULT_ORIGIN;
@@ -185,6 +185,7 @@ process.on("uncaughtException", (err) => {
 app.listen(PORT, () =>
   console.log(`⚡ ZAP wrapper running on ${PORT}, awaiting at ${ZAP_HOST}`)
 );
+
 
 
 
