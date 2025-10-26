@@ -1,6 +1,6 @@
 /**
  * zapvault/index.js
- * Node wrapper for OWASP ZAP. * Supports: scan (/scan) + scheduled scans (/schedule) +  quick scan (/quick-scan)
+ * Node wrapper for OWASP ZAP. Supports: scan (/scan) + scheduled scans (/schedule) + quick scan (/quick-scan)
  */
 
 import express from "express";
@@ -12,8 +12,8 @@ const app = express();
 app.use(express.json());
 
 // ================== CONFIG ==================
-const ZAP_HOST = "http://0.0.0.0:8080";
-const PORT = 3000;
+const ZAP_HOST = "http://127.0.0.1:8080";
+const PORT = process.env.PORT || 3000;
 const MAX_SCAN_TIME_MS = 3 * 60 * 1000; // 3 minutes
 const POLL_INTERVAL_MS = 3000;
 const VAULT_ORIGIN = process.env.VAULT_ORIGIN;
@@ -59,7 +59,7 @@ function normalizeUrl(u) {
 // ================== CORE SCAN FUNCTION ==================
 async function performScan(target) {
   const startedAt = Date.now();
-  await axios.get(target).catch(() => {});
+  await axios.get(target).catch(() => {}); // fetch once
 
   // Spider
   await zapApi(`/JSON/spider/action/scan/?url=${encodeURIComponent(target)}`);
@@ -93,26 +93,29 @@ async function performScan(target) {
     alerts: alerts.alerts || [],
   };
 }
+
 // ================== WAIT FOR ZAP READY ==================
 async function waitForZapReady() {
   let attempts = 0;
-  while (attempts < 10) {
+  const maxAttempts = 30; // 30 attempts
+  const delayMs = 3000; // 3 sec interval
+  while (attempts < maxAttempts) {
     try {
-      // Check if ZAP responds
       await axios.get(`${ZAP_HOST}/JSON/core/view/version/`);
       console.log("✅ ZAP daemon is ready");
       return true;
     } catch {
       attempts++;
-      console.log(`⏳ Waiting for ZAP to start... (${attempts}/10)`);
-      await new Promise(r => setTimeout(r, 2000));
+      console.log(`⏳ Waiting for ZAP to start... (${attempts}/${maxAttempts})`);
+      await new Promise(r => setTimeout(r, delayMs));
     }
   }
   throw new Error("ZAP Daemon not ready after multiple attempts");
 }
 
 // ================== ROUTES ==================
-//  Health check (used by Dockerfile+host)
+
+// Health check
 app.get("/health", (req, res) => res.json({ status: "ok", service: "zapvault" }));
 
 // Instant Scan
@@ -127,23 +130,19 @@ app.post("/scan", validateApiKey, async (req, res) => {
   }
 });
 
+// Quick Passive Scan
 app.post("/quick-scan", validateApiKey, async (req, res) => {
   try {
     const { url } = req.body;
     const target = normalizeUrl(url);
     console.log(`⚡ Performing Quick Passive Scan on ${target}`);
 
-    await axios.get(target).catch(() => {}); // Fetch once to populate passive records
-   // Escape special regex characters in the target URL
-const regex = target.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '.*';
-await zapApi(`/JSON/context/action/includeInContext/?contextName=Default+Context&regex=${encodeURIComponent(regex)}`);
-
+    await axios.get(target).catch(() => {}); // fetch once
+    const regex = target.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '.*';
+    await zapApi(`/JSON/context/action/includeInContext/?contextName=Default+Context&regex=${encodeURIComponent(regex)}`);
     await zapApi(`/JSON/pscan/action/scanAllInScope/`);
 
-    // Retrieve passive alerts directly
-    const alerts = await zapApi(
-      `/JSON/core/view/alerts/?baseurl=${encodeURIComponent(target)}&start=0&count=9999`
-    );
+    const alerts = await zapApi(`/JSON/core/view/alerts/?baseurl=${encodeURIComponent(target)}&start=0&count=9999`);
 
     res.json({
       target,
@@ -156,24 +155,26 @@ await zapApi(`/JSON/context/action/includeInContext/?contextName=Default+Context
   }
 });
 
+// Continuous scan scheduling (Real-Time Threat Detector)
+const registeredSites = new Map();
+let scanning = false;
 
-// Continuous scan scheduling (for Real-Time Threat Detector)
-const registeredSites = new Map(); // {url: {lastScan, alerts}}
 setInterval(async () => {
+  if (scanning) return;
+  scanning = true;
   for (const [url, info] of registeredSites) {
     try {
       const result = await performScan(url);
-      registeredSites.set(url, {
-        lastScan: new Date().toISOString(),
-        alerts: result.alerts,
-      });
+      registeredSites.set(url, { lastScan: new Date().toISOString(), alerts: result.alerts });
       console.log(`[Real-Time] Scanned: ${url}`);
     } catch (err) {
       console.error(`[Real-Time] Failed: ${url}`, err.message);
     }
   }
+  scanning = false;
 }, 60 * 60 * 1000); // every 1 hour
 
+// Schedule URL for continuous monitoring
 app.post("/schedule", validateApiKey, (req, res) => {
   const { url } = req.body;
   try {
@@ -185,30 +186,30 @@ app.post("/schedule", validateApiKey, (req, res) => {
   }
 });
 
+// Status of registered sites
 app.get("/status", validateApiKey, (req, res) => {
   res.json(Object.fromEntries(registeredSites));
 });
 
 // Root info
 app.get("/", (req, res) => res.send("✅ ZAP service is active"));
-// Global error handler for unexpected errors
-process.on("unhandledRejection", (reason) => {
-  console.error("Unhandled Rejection:", reason);
-});
-process.on("uncaughtException", (err) => {
-  console.error("Uncaught Exception:", err);
-});
 
+// Global error handlers
+process.on("unhandledRejection", (reason) => console.error("Unhandled Rejection:", reason));
+process.on("uncaughtException", (err) => console.error("Uncaught Exception:", err));
+
+// ================== START SERVER ==================
 (async () => {
   try {
     console.log("🚀 Starting ZAP Vault service...");
-    await waitForZapReady();
-    app.listen(PORT, () =>
-      console.log(`⚡ ZAP wrapper running on ${PORT}, connected to ${ZAP_HOST}`)
-    );
+    try {
+      await waitForZapReady();
+    } catch(err) {
+      console.warn("⚠️ ZAP did not respond immediately. Starting server anyway.");
+    }
+    app.listen(PORT, () => console.log(`⚡ ZAP wrapper running on ${PORT}, connected to ${ZAP_HOST}`));
   } catch (err) {
     console.error("❌ Failed to start service:", err.message);
     process.exit(1);
   }
 })();
-
