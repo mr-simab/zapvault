@@ -22,4 +22,5 @@ EXPOSE 3000 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -f http://127.0.0.1:3000/health || exit 1
 # Start ZAP bound to internal interface then start node wrapper; use JSON form for signals
-CMD ["/bin/sh","-c","/opt/zap/zap.sh -daemon -host 127.0.0.1 -port 8080 -config api.disablekey=true & sleep 15 && node index.js"]
+CMD ["/bin/sh","-c","/opt/zap/zap.sh -daemon -host 127.0.0.1 -port 8080 -config api.disablekey=true -config scanner.clientIntegration=false & sleep 15 && node index.js"]
+
