@@ -96,7 +96,7 @@ async function performScan(target) {
 
 // ================== ROUTES ==================
 //  Health check (used by Dockerfile + Fly)
-app.get("/health", (req, res) => res.json({ status: "ok", service: "zap-fly" }));
+app.get("/health", (req, res) => res.json({ status: "ok", service: "zapvault" }));
 
 // Instant Scan
 app.post("/scan", validateApiKey, async (req, res) => {
@@ -181,3 +181,4 @@ process.on("uncaughtException", (err) => {
 app.listen(PORT, () =>
   console.log(`⚡ ZAP wrapper running on ${PORT}, awaiting at ${ZAP_HOST}`)
 );
+
