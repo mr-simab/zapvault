@@ -1,4 +1,4 @@
-# zap-fly/Dockerfile
+# zapvault/Dockerfile
 # Purpose: single image with Java JRE, ZAP, and Node wrapper.
 FROM node:18-bullseye
 
@@ -18,7 +18,7 @@ RUN if [ -f /opt/zap/zap.sh ]; then \
     fi
 # Node port (3000) and ZAP port (8080) internally
 EXPOSE 3000 8080
-#Fly.io healthcheck endpoint (recommended)
+# Healthcheck endpoint (recommended)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -f http://127.0.0.1:3000/health || exit 1
 # Start ZAP bound to internal interface then start node wrapper; use JSON form for signals
