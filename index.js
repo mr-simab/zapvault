@@ -95,7 +95,7 @@ async function performScan(target) {
 }
 
 // ================== ROUTES ==================
-//  Health check (used by Dockerfile + Fly)
+//  Health check (used by Dockerfile+host)
 app.get("/health", (req, res) => res.json({ status: "ok", service: "zapvault" }));
 
 // Instant Scan
@@ -169,7 +169,7 @@ app.get("/status", validateApiKey, (req, res) => {
 });
 
 // Root info
-app.get("/", (req, res) => res.send("✅ ZAP service is active (Fly.io)"));
+app.get("/", (req, res) => res.send("✅ ZAP service is active"));
 // Global error handler for unexpected errors
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled Rejection:", reason);
