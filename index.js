@@ -117,6 +117,7 @@ app.post("/quick-scan", validateApiKey, async (req, res) => {
     console.log(`⚡ Performing Quick Passive Scan on ${target}`);
 
     await axios.get(target).catch(() => {}); // Fetch once to populate passive records
+    await zapApi(`/JSON/context/action/includeInContext/?contextName=Default+Context&regex=${encodeURIComponent(target)}`);
     await zapApi(`/JSON/pscan/action/scanAllInScope/`);
 
     // Retrieve passive alerts directly
@@ -181,4 +182,5 @@ process.on("uncaughtException", (err) => {
 app.listen(PORT, () =>
   console.log(`⚡ ZAP wrapper running on ${PORT}, awaiting at ${ZAP_HOST}`)
 );
+
 
